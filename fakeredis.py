@@ -400,6 +400,8 @@ class FakeRedis(object):
         # remain valid during deletion.
         for index in reversed(indices_to_remove):
             del a_list[index]
+        if not self._db.get(name):
+            self.delete(name)
         return len(indices_to_remove)
 
     def rpush(self, name, *values):
@@ -409,7 +411,10 @@ class FakeRedis(object):
 
     def lpop(self, name):
         try:
-            return self._db.get(name, []).pop(0)
+            val = self._db.get(name, []).pop(0)
+            if not self._db.get(name):
+                self.delete(name)
+            return val
         except IndexError:
             return None
 
@@ -450,7 +455,10 @@ class FakeRedis(object):
 
     def rpop(self, name):
         try:
-            return self._db.get(name, []).pop()
+            val = self._db.get(name, []).pop()
+            if not self._db.get(name):
+                self.delete(name)
+            return val
         except IndexError:
             return None
 
@@ -460,6 +468,8 @@ class FakeRedis(object):
 
     def rpoplpush(self, src, dst):
         el = self._db.get(src).pop()
+        if not self._db.get(src):
+            self.delete(src)
         self._db.setdefaultnonstring(dst, []).insert(0, el)
         return el
 
@@ -476,7 +486,10 @@ class FakeRedis(object):
             keys = list(keys)
         for key in keys:
             if self._db.get(key, []):
-                return (key, self._db[key].pop(0))
+                popVal = self._db[key].pop(0)
+                if not self._db.get(key):
+                    self.delete(key)
+                return (key, popVal)
 
     def brpop(self, keys, timeout=0):
         if isinstance(keys, basestring):
@@ -485,10 +498,15 @@ class FakeRedis(object):
             keys = list(keys)
         for key in keys:
             if self._db.get(key, []):
-                return (key, self._db[key].pop())
+                popVal = self._db[key].pop()
+                if not self._db.get(key, []):
+                    self.delete(key)
+                return (key, popVal)
 
     def brpoplpush(self, src, dst, timeout=0):
         el = self._db.get(src).pop()
+        if not self._db.get(src):
+            self.delete(src)
         self._db.setdefaultnonstring(dst, []).insert(0, el)
         return el
 
@@ -499,6 +517,8 @@ class FakeRedis(object):
             if k in h:
                 del h[k]
                 rem += 1
+        if not self._db.get(name):
+            self.delete(name)
         return rem > 0
 
     def hexists(self, name, key):
@@ -648,6 +668,8 @@ class FakeRedis(object):
         a_set = self._db.setdefaultnonstring(name, set())
         card = len(a_set)
         a_set -= set(str(v) for v in values)
+        if not a_set:
+            self.delete(name)
         return (card - len(a_set)) > 0
 
     def sunion(self, keys, *args):
@@ -816,6 +838,8 @@ class FakeRedis(object):
             if v in z:
                 del z[v]
                 rem += 1
+        if not z:
+            self.delete(name)
         return rem > 0
 
     def zremrangebyrank(self, name, min, max):
@@ -835,6 +859,8 @@ class FakeRedis(object):
         for key in in_order[min:max]:
             del all_items[key]
             num_deleted += 1
+        if not self._db.get(name):
+            self.delete(name)
         return num_deleted
 
     def zremrangebyscore(self, name, min, max):
@@ -848,6 +874,8 @@ class FakeRedis(object):
             if min <= all_items[key] <= max:
                 del all_items[key]
                 removed += 1
+        if not self._db.get(name):
+            self.delete(name)
         return removed
 
     def zrevrange(self, name, start, num, withscores=False):

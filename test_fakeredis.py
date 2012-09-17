@@ -336,6 +336,7 @@ class TestFakeRedis(unittest.TestCase):
         self.redis.lpush('foo', 'one')
         self.redis.lrem('foo', 'one', 0)
         self.assertEqual(self.redis.lrange('foo', 0, -1), [])
+        self.assertEqual(self.redis.exists('foo'), False)
 
     def test_lrem_default_value(self):
         self.redis.lpush('foo', 'one')
@@ -343,13 +344,14 @@ class TestFakeRedis(unittest.TestCase):
         self.redis.lpush('foo', 'one')
         self.redis.lrem('foo', 'one')
         self.assertEqual(self.redis.lrange('foo', 0, -1), [])
+        self.assertEqual(self.redis.exists('foo'), False)
 
     def test_lrem_does_not_exist(self):
         self.redis.lpush('foo', 'one')
         self.redis.lrem('foo', 'one')
-        # These should be noops.
-        self.redis.lrem('foo', 'one', -2)
-        self.redis.lrem('foo', 'one', 2)
+        self.assertEqual(self.redis.exists('foo'), False)
+        self.assertEqual(self.redis.lrem('foo', 'one', -2), 0)
+        self.assertEqual(self.redis.lrem('foo', 'one', 2), 0)
 
     def test_lrem_return_value(self):
         self.redis.lpush('foo', 'one')
@@ -377,6 +379,7 @@ class TestFakeRedis(unittest.TestCase):
         self.redis.rpush('foo', 'one')
         self.redis.lpop('foo')
         self.assertEqual(self.redis.lpop('foo'), None)
+        self.assertEqual(self.redis.exists('foo'), False)
         # Verify what happens if we try to pop from a key
         # we've never seen before.
         self.assertEqual(self.redis.lpop('noexists'), None)
@@ -434,6 +437,7 @@ class TestFakeRedis(unittest.TestCase):
         self.assertEqual(self.redis.rpop('foo'), 'two')
         self.assertEqual(self.redis.rpop('foo'), 'one')
         self.assertEqual(self.redis.rpop('foo'), None)
+        self.assertEqual(self.redis.exists('foo'), False)
 
     def test_linsert(self):
         self.redis.rpush('foo', 'hello')
@@ -450,6 +454,17 @@ class TestFakeRedis(unittest.TestCase):
         self.assertEqual(self.redis.rpoplpush('foo', 'bar'), 'two')
         self.assertEqual(self.redis.lrange('foo', 0, -1), ['one'])
         self.assertEqual(self.redis.lrange('bar', 0, -1), ['two', 'one'])
+
+    def test_rpoplpush_empty_exists(self):
+        self.redis.rpush('foo', 'one')
+        self.redis.rpush('foo', 'two')
+        self.redis.rpush('bar', 'one')
+
+        self.assertEqual(self.redis.rpoplpush('foo', 'bar'), 'two')
+        self.assertEqual(self.redis.rpoplpush('foo', 'bar'), 'one')
+        self.assertEqual(self.redis.lrange('foo', 0, -1), [])
+        self.assertEqual(self.redis.lrange('bar', 0, -1), ['one', 'two', 'one'])
+        self.assertEqual(self.redis.exists('foo'), False)
 
     def test_blpop_single_list(self):
         self.redis.rpush('foo', 'one')
@@ -478,6 +493,11 @@ class TestFakeRedis(unittest.TestCase):
         self.redis.rpush('foo', 'one')
         self.assertEqual(self.redis.blpop('foo', timeout=1), ('foo', 'one'))
 
+    def test_blpop_empty_exists(self):
+        self.redis.rpush('foo', 'one')
+        self.redis.blpop('foo', timeout=1)
+        self.assertEqual(self.redis.exists('foo'), False)
+
     def test_brpop_test_multiple_lists(self):
         self.redis.rpush('foo', 'one')
         self.redis.rpush('foo', 'two')
@@ -490,12 +510,31 @@ class TestFakeRedis(unittest.TestCase):
         self.assertEqual(self.redis.brpop('foo', timeout=1),
                          ('foo', 'two'))
 
+    def test_brpop_emptying(self):
+        self.redis.rpush('foo', 'one')
+        self.redis.rpush('foo', 'two')
+        self.assertEqual(self.redis.brpop('foo', timeout=1),
+                         ('foo', 'two'))
+        self.assertEqual(self.redis.brpop('foo', timeout=1),
+                         ('foo', 'one'))
+        self.assertEqual(self.redis.exists('foo'), False)
+
     def test_brpoplpush_multi_keys(self):
         self.redis.rpush('foo', 'one')
         self.redis.rpush('foo', 'two')
         self.assertEqual(self.redis.brpoplpush('foo', 'bar', timeout=1),
                          'two')
         self.assertEqual(self.redis.lrange('bar', 0, -1), ['two'])
+
+    def test_brpoplpush_emptying(self):
+        self.redis.rpush('foo', 'one')
+        self.redis.rpush('foo', 'two')
+        self.assertEqual(self.redis.brpoplpush('foo', 'bar', timeout=1),
+                         'two')
+        self.assertEqual(self.redis.brpoplpush('foo', 'bar', timeout=1),
+                         'one')
+        self.assertEqual(self.redis.exists('foo'), False)
+        self.assertEqual(self.redis.lrange('bar', 0, -1), ['one', 'two'])
 
     ## Tests for the hash type.
 
@@ -560,6 +599,7 @@ class TestFakeRedis(unittest.TestCase):
         self.assertEqual(self.redis.hget('foo', 'k2'), None)
         self.assertEqual(self.redis.hget('foo', 'k3'), None)
         self.assertEqual(self.redis.hdel('foo', 'k2', 'k3'), False)
+        self.assertEqual(self.redis.exists('foo'), False)
 
     def test_hincrby(self):
         self.redis.hset('foo', 'counter', 0)
@@ -689,6 +729,7 @@ class TestFakeRedis(unittest.TestCase):
         self.assertEqual(self.redis.srem('foo', 'member3', 'member4'), True)
         self.assertEqual(self.redis.smembers('foo'), set([]))
         self.assertEqual(self.redis.srem('foo', 'member3', 'member4'), False)
+        self.assertEqual(self.redis.exists('foo'), False)
 
     def test_sunion(self):
         self.redis.sadd('foo', 'member1')
@@ -798,7 +839,7 @@ class TestFakeRedis(unittest.TestCase):
         self.assertEqual(self.redis.zrem('foo', 'three', 'four'), True)
         self.assertEqual(self.redis.zrange('foo', 0, -1), [])
         self.assertEqual(self.redis.zrem('foo', 'three', 'four'), False)
-
+        self.assertEqual(self.redis.exists('foo'), False)
 
     def test_zrem_non_existent_member(self):
         self.assertFalse(self.redis.zrem('foo', 'one'))
@@ -879,6 +920,14 @@ class TestFakeRedis(unittest.TestCase):
         self.assertEqual(self.redis.zremrangebyrank('foo', 0, 1), 2)
         self.assertEqual(self.redis.zrange('foo', 0, -1), ['three'])
 
+    def test_zremrangeall(self):
+        self.redis.zadd('foo', one=1)
+        self.redis.zadd('foo', two=2)
+        self.redis.zadd('foo', three=3)
+        self.assertEqual(self.redis.zremrangebyrank('foo', 0, 2), 3)
+        self.assertEqual(self.redis.zrange('foo', 0, -1), [])
+        self.assertEqual(self.redis.exists('foo'), False)
+
     def test_zremrangebyrank_negative_indices(self):
         self.redis.zadd('foo', one=1)
         self.redis.zadd('foo', two=2)
@@ -905,6 +954,7 @@ class TestFakeRedis(unittest.TestCase):
         # Entire range.
         self.assertEqual(self.redis.zremrangebyscore('foo', 0, 4), 2)
         self.assertEqual(self.redis.zrange('foo', 0, -1), [])
+        self.assertEqual(self.redis.exists('foo'), False)
 
     def test_zremrangebyscore_badkey(self):
         self.assertEqual(self.redis.zremrangebyscore('foo', 0, 2), 0)
